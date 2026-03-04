@@ -1,18 +1,20 @@
 {
     "manifest_version": 3,
     "name": "Exam Helper",
-    "version": "1.0",
+    "version": "3.1",
+    "description": "Copy câu hỏi và tự động điền đáp án",
     "permissions": [
       "activeTab",
-      "scripting"
+      "scripting",
+      "clipboardRead"
     ],
-    "host_permissions": [
-      "https://api.openai.com/*"
+    "host_permissions": ["<all_urls>"],
+    "web_accessible_resources": [
+      {
+        "resources": ["prompts/*"],
+        "matches": ["<all_urls>"]
+      }
     ],
-    "background": {
-      "service_worker": "background.js",
-      "type": "module"
-    },
     "action": {
       "default_popup": "popup.html"
     }

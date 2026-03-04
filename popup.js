@@ -1,102 +1,127 @@
-document.getElementById("runBtn").addEventListener("click", async () => {
+// =======================
+// LOAD PROMPT LIST
+// =======================
 
-    console.log("🔘 Button clicked");
+document.addEventListener("DOMContentLoaded", async () => {
+
+    const select = document.getElementById("promptSelect");
+    const url = chrome.runtime.getURL("prompts/prompts.json");
   
-    const [tab] = await chrome.tabs.query({
-      active: true,
-      currentWindow: true
+    const response = await fetch(url);
+    const data = await response.json();
+  
+    data.forEach(file => {
+      const option = document.createElement("option");
+      option.value = file.file;
+      option.textContent = file.name;
+      select.appendChild(option);
     });
   
-    console.log("📄 Active tab:", tab.url);
+  });
+  
+  
+  // =======================
+  // COPY
+  // =======================
+  
+  document.getElementById("copyBtn").addEventListener("click", async () => {
+  
+    const selectedFile = document.getElementById("promptSelect").value;
+    const promptUrl = chrome.runtime.getURL("prompts/" + selectedFile);
+  
+    const response = await fetch(promptUrl);
+    const customPrompt = await response.text();
+  
+    let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   
     chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: () => document.body.innerText
-    }, (results) => {
+      target: { tabId: tab.id, allFrames: true },
+      args: [customPrompt],
+      func: (promptText) => {
   
-      if (!results || !results[0]) {
-        console.error("❌ Không lấy được nội dung trang");
-        alert("Không lấy được nội dung trang");
-        return;
-      }
-  
-      const text = results[0].result;
-      console.log("📋 Đã copy text, độ dài:", text.length);
-  
-      if (!text || text.length < 20) {
-        console.warn("⚠️ Nội dung quá ngắn hoặc rỗng");
-        alert("Không tìm thấy câu hỏi");
-        return;
-      }
-  
-      console.log("📤 Gửi sang GPT...");
-  
-      chrome.runtime.sendMessage({
-        type: "ASK_GPT",
-        questionText: "Chỉ gửi đáp án dạng \"A B C D ...\" thôi\n\n" + text
-      }, (response) => {
-  
-        if (!response) {
-          console.error("❌ Không nhận được response từ background");
+        let questions = document.querySelectorAll(".question");
+        if (!questions.length) {
           return;
         }
   
-        if (!response.success) {
-          console.error("❌ GPT lỗi:", response.error);
-          alert("Lỗi GPT: " + response.error);
-          return;
+        const questionsText = Array.from(questions)
+          .map((q, index) => {
+  
+            const question = q.querySelector(".tracnghiem_content_chinh")?.innerText.trim() || "";
+  
+            const answers = Array.from(q.querySelectorAll(".answer"))
+                .map(a => a.innerText.trim())
+                .join(" ");
+  
+            return `Câu ${index+1}: ${question}\n${answers}`;
+          })
+          .join("\n\n");
+  
+        const finalText = promptText.trim() + "\n\n" + questionsText;
+  
+        const textarea = document.createElement("textarea");
+        textarea.value = finalText;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+  
+        alert("Đã copy câu hỏi kèm prompt!");
+  
+      }
+    });
+  
+  });
+  
+  
+  // =======================
+  // PASTE
+  // =======================
+  
+  document.getElementById("pasteBtn").addEventListener("click", async () => {
+  
+    try {
+      const clipboardText = await navigator.clipboard.readText();
+  
+      let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  
+      chrome.scripting.executeScript({
+        target: { tabId: tab.id, allFrames: true },
+        args: [clipboardText],
+        func: (input) => {
+  
+          let answers = input
+            .toUpperCase()
+            .replace(/[^A-D]/g, " ")
+            .split(/\s+/)
+            .filter(a => a);
+  
+          let questions = document.querySelectorAll(".question");
+          if (!questions.length) {
+            return;
+          }
+  
+          questions.forEach((q, i) => {
+  
+            let letter = answers[i];
+            if (!letter) return;
+  
+            let index = letter.charCodeAt(0) - 65;
+            let radios = q.querySelectorAll("input[type='radio']");
+  
+            if (radios[index]) {
+              radios[index].click();
+            }
+  
+          });
+  
+          alert("Đã tự động điền đáp án!");
+  
         }
-  
-        console.log("📥 GPT trả về:", response.answer);
-  
-        const answers = response.answer
-          .trim()
-          .replace(/[^A-D\s]/g, "")
-          .split(/\s+/);
-  
-        console.log("🧩 Parsed answers:", answers);
-        console.log("🔢 Số đáp án:", answers.length);
-  
-        chrome.scripting.executeScript({
-          target: { tabId: tab.id },
-          func: (answers) => {
-  
-            console.log("🎯 Bắt đầu điền đáp án");
-  
-            const radios = document.querySelectorAll("input[type='radio']");
-            console.log("🔍 Tìm thấy radio:", radios.length);
-  
-            let filled = 0;
-            let index = 0;
-  
-            radios.forEach(radio => {
-              const value = radio.value?.toUpperCase();
-  
-              if (value === answers[index]) {
-                radio.click();
-                filled++;
-                index++;
-              }
-            });
-  
-            console.log("✅ Đã tick:", filled);
-            return {
-              totalRadio: radios.length,
-              filled: filled
-            };
-  
-          },
-          args: [answers]
-        }, (fillResult) => {
-  
-          console.log("📊 Kết quả điền:", fillResult[0].result);
-  
-          alert("Đã điền xong. Tick được: " + fillResult[0].result.filled);
-  
-        });
-  
       });
   
-    });
+    } catch (err) {
+      alert("Không đọc được clipboard.");
+    }
   
   });
