@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "Exam Helper",
-    "version": "2.1",
+    "version": "3.1",
     "description": "Copy câu hỏi và tự động điền đáp án",
     "permissions": [
       "activeTab",
@@ -9,6 +9,12 @@
       "clipboardRead"
     ],
     "host_permissions": ["<all_urls>"],
+    "web_accessible_resources": [
+      {
+        "resources": ["prompts/*"],
+        "matches": ["<all_urls>"]
+      }
+    ],
     "action": {
       "default_popup": "popup.html"
     }

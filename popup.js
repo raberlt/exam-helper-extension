@@ -1,35 +1,63 @@
 // =======================
-// COPY CÂU HỎI
+// LOAD PROMPT LIST
 // =======================
 
-document.getElementById("copyBtn").addEventListener("click", async () => {
+document.addEventListener("DOMContentLoaded", async () => {
 
+    const select = document.getElementById("promptSelect");
+    const url = chrome.runtime.getURL("prompts/prompts.json");
+  
+    const response = await fetch(url);
+    const data = await response.json();
+  
+    data.forEach(file => {
+      const option = document.createElement("option");
+      option.value = file.file;
+      option.textContent = file.name;
+      select.appendChild(option);
+    });
+  
+  });
+  
+  
+  // =======================
+  // COPY
+  // =======================
+  
+  document.getElementById("copyBtn").addEventListener("click", async () => {
+  
+    const selectedFile = document.getElementById("promptSelect").value;
+    const promptUrl = chrome.runtime.getURL("prompts/" + selectedFile);
+  
+    const response = await fetch(promptUrl);
+    const customPrompt = await response.text();
+  
     let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   
     chrome.scripting.executeScript({
       target: { tabId: tab.id, allFrames: true },
-      func: () => {
+      args: [customPrompt],
+      func: (promptText) => {
   
         let questions = document.querySelectorAll(".question");
-        if (!questions.length) return;
+        if (!questions.length) {
+          return;
+        }
   
         const questionsText = Array.from(questions)
           .map((q, index) => {
   
             const question = q.querySelector(".tracnghiem_content_chinh")?.innerText.trim() || "";
   
-            const answers = Array.from(q.querySelectorAll(".answer b"))
-              .map((a, i) => `${String.fromCharCode(65+i)}. ${a.innerText.trim()}`)
-              .join("\n");
+            const answers = Array.from(q.querySelectorAll(".answer"))
+                .map(a => a.innerText.trim())
+                .join(" ");
   
-            return `Câu ${index+1}: ${question}\n\n${answers}`;
+            return `Câu ${index+1}: ${question}\n${answers}`;
           })
-          .join("\n\n====================\n\n");
+          .join("\n\n");
   
-        // 👇 Thêm dòng prompt ở trên cùng
-        const finalText =
-          'Chỉ gửi đáp án dạng "A B C D ..." thôi\n\n' +
-          questionsText;
+        const finalText = promptText.trim() + "\n\n" + questionsText;
   
         const textarea = document.createElement("textarea");
         textarea.value = finalText;
@@ -47,7 +75,7 @@ document.getElementById("copyBtn").addEventListener("click", async () => {
   
   
   // =======================
-  // PASTE & TỰ ĐIỀN
+  // PASTE
   // =======================
   
   document.getElementById("pasteBtn").addEventListener("click", async () => {
@@ -69,7 +97,9 @@ document.getElementById("copyBtn").addEventListener("click", async () => {
             .filter(a => a);
   
           let questions = document.querySelectorAll(".question");
-          if (!questions.length) return;
+          if (!questions.length) {
+            return;
+          }
   
           questions.forEach((q, i) => {
   
@@ -91,7 +121,7 @@ document.getElementById("copyBtn").addEventListener("click", async () => {
       });
   
     } catch (err) {
-      alert("Không đọc được clipboard. Hãy cấp quyền clipboard.");
+      alert("Không đọc được clipboard.");
     }
   
   });
