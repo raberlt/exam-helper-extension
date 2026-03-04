@@ -1,97 +1,102 @@
-// =======================
-// COPY CÂU HỎI
-// =======================
+document.getElementById("runBtn").addEventListener("click", async () => {
 
-document.getElementById("copyBtn").addEventListener("click", async () => {
-
-    let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    console.log("🔘 Button clicked");
   
-    chrome.scripting.executeScript({
-      target: { tabId: tab.id, allFrames: true },
-      func: () => {
-  
-        let questions = document.querySelectorAll(".question");
-        if (!questions.length) return;
-  
-        const questionsText = Array.from(questions)
-          .map((q, index) => {
-  
-            const question = q.querySelector(".tracnghiem_content_chinh")?.innerText.trim() || "";
-  
-            const answers = Array.from(q.querySelectorAll(".answer b"))
-              .map((a, i) => `${String.fromCharCode(65+i)}. ${a.innerText.trim()}`)
-              .join("\n");
-  
-            return `Câu ${index+1}: ${question}\n\n${answers}`;
-          })
-          .join("\n\n====================\n\n");
-  
-        // 👇 Thêm dòng prompt ở trên cùng
-        const finalText =
-          'Chỉ gửi đáp án dạng "A B C D ..." thôi\n\n' +
-          questionsText;
-  
-        const textarea = document.createElement("textarea");
-        textarea.value = finalText;
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand("copy");
-        document.body.removeChild(textarea);
-  
-        alert("Đã copy câu hỏi kèm prompt!");
-  
-      }
+    const [tab] = await chrome.tabs.query({
+      active: true,
+      currentWindow: true
     });
   
-  });
+    console.log("📄 Active tab:", tab.url);
   
+    chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: () => document.body.innerText
+    }, (results) => {
   
-  // =======================
-  // PASTE & TỰ ĐIỀN
-  // =======================
+      if (!results || !results[0]) {
+        console.error("❌ Không lấy được nội dung trang");
+        alert("Không lấy được nội dung trang");
+        return;
+      }
   
-  document.getElementById("pasteBtn").addEventListener("click", async () => {
+      const text = results[0].result;
+      console.log("📋 Đã copy text, độ dài:", text.length);
   
-    try {
-      const clipboardText = await navigator.clipboard.readText();
+      if (!text || text.length < 20) {
+        console.warn("⚠️ Nội dung quá ngắn hoặc rỗng");
+        alert("Không tìm thấy câu hỏi");
+        return;
+      }
   
-      let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      console.log("📤 Gửi sang GPT...");
   
-      chrome.scripting.executeScript({
-        target: { tabId: tab.id, allFrames: true },
-        args: [clipboardText],
-        func: (input) => {
+      chrome.runtime.sendMessage({
+        type: "ASK_GPT",
+        questionText: "Chỉ gửi đáp án dạng \"A B C D ...\" thôi\n\n" + text
+      }, (response) => {
   
-          let answers = input
-            .toUpperCase()
-            .replace(/[^A-D]/g, " ")
-            .split(/\s+/)
-            .filter(a => a);
-  
-          let questions = document.querySelectorAll(".question");
-          if (!questions.length) return;
-  
-          questions.forEach((q, i) => {
-  
-            let letter = answers[i];
-            if (!letter) return;
-  
-            let index = letter.charCodeAt(0) - 65;
-            let radios = q.querySelectorAll("input[type='radio']");
-  
-            if (radios[index]) {
-              radios[index].click();
-            }
-  
-          });
-  
-          alert("Đã tự động điền đáp án!");
-  
+        if (!response) {
+          console.error("❌ Không nhận được response từ background");
+          return;
         }
+  
+        if (!response.success) {
+          console.error("❌ GPT lỗi:", response.error);
+          alert("Lỗi GPT: " + response.error);
+          return;
+        }
+  
+        console.log("📥 GPT trả về:", response.answer);
+  
+        const answers = response.answer
+          .trim()
+          .replace(/[^A-D\s]/g, "")
+          .split(/\s+/);
+  
+        console.log("🧩 Parsed answers:", answers);
+        console.log("🔢 Số đáp án:", answers.length);
+  
+        chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: (answers) => {
+  
+            console.log("🎯 Bắt đầu điền đáp án");
+  
+            const radios = document.querySelectorAll("input[type='radio']");
+            console.log("🔍 Tìm thấy radio:", radios.length);
+  
+            let filled = 0;
+            let index = 0;
+  
+            radios.forEach(radio => {
+              const value = radio.value?.toUpperCase();
+  
+              if (value === answers[index]) {
+                radio.click();
+                filled++;
+                index++;
+              }
+            });
+  
+            console.log("✅ Đã tick:", filled);
+            return {
+              totalRadio: radios.length,
+              filled: filled
+            };
+  
+          },
+          args: [answers]
+        }, (fillResult) => {
+  
+          console.log("📊 Kết quả điền:", fillResult[0].result);
+  
+          alert("Đã điền xong. Tick được: " + fillResult[0].result.filled);
+  
+        });
+  
       });
   
-    } catch (err) {
-      alert("Không đọc được clipboard. Hãy cấp quyền clipboard.");
-    }
+    });
   
   });
